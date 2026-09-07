@@ -48,9 +48,39 @@ export default function Login() {
     }
   }
 
-  function handleEntraLogin() {
-    // Entra SSO: GET /auth/login redirects to Microsoft (when AUTH_PROVIDER=entra)
-    window.location.href = `${AUTH_BASE}/login`
+  async function handleEntraLogin() {
+    // Entra SSO: GET /auth/login redirects to Microsoft when AUTH_PROVIDER=entra.
+    // In dummy/bypass local dev (BE .env AUTH_PROVIDER=dummy) this endpoint
+    // 302s to "/" and does NOT create a session, so bouncing would loop to /login.
+    // Detect via manual redirect and show a helpful message instead of looping.
+    setError('')
+    try {
+      const res = await fetch(`${AUTH_BASE}/login`, {
+        method: 'GET',
+        credentials: 'include',
+        redirect: 'manual',
+      })
+      const loc = res.headers.get('location') || ''
+      // Fastify 302: location is "/" for dummy, "https://login.microsoftonline.com/..." for entra
+      if (loc.includes('login.microsoftonline.com')) {
+        window.location.href = `${AUTH_BASE}/login`
+        return
+      }
+      if (res.type === 'opaqueredirect' || res.status === 0) {
+        // Vite proxy may return opaqueredirect for manual; fall through to navigation
+        // and let BE decide, but dummy will bounce to "/" without session -> show hint
+        window.location.href = `${AUTH_BASE}/login`
+        return
+      }
+      if (loc === '/' || loc.endsWith('/') || res.status === 302) {
+        setError('Entra SSO is disabled (BE AUTH_PROVIDER=dummy). Use dummy login above (user / 123456) or set AUTH_PROVIDER=entra + ENTRA_* in playback-be/.env.development and restart BE.')
+        return
+      }
+      window.location.href = `${AUTH_BASE}/login`
+    } catch {
+      // Network fallback: try direct navigation
+      window.location.href = `${AUTH_BASE}/login`
+    }
   }
 
   if (loading) return null
