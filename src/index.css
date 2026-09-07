@@ -1,0 +1,62 @@
+/* Global styles - Tailwind directives + minimal resets (rules allow a global CSS file for resets). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Brand tokens (from the approved palette). */
+  --primary-color: #d31145;
+  --primary-focus: #940b30;
+  --primary-hover: #b40e3a;
+  --secondary-hover: #fdf4f6;
+  --secondary-press: #f8dbe3;
+  --tab-hover: #5699c1;
+  --tab-active: #1f78ad;
+  --colored-card-bg-option-one: #a10354;
+  --colored-card-bg-option-two: #db406a;
+  --colored-card-bg-option-three: #ce425c;
+  --section-bg-light: #f7f7f8;
+
+  /* Semantic surfaces / text - light theme. */
+  --canvas: #f7f7f8; /* section-bg-light */
+  --surface: #ffffff;
+  --surface-muted: #f3f4f6;
+  --border-color: #e5e7eb;
+  --text-strong: #111827;
+  --text-body: #374151;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+
+  color-scheme: light;
+}
+
+.dark {
+  /* Semantic surfaces / text - neutral-slate dark theme. */
+  --canvas: #0f1117;
+  --surface: #1a1d27;
+  --surface-muted: #232735;
+  --border-color: #2e3342;
+  --text-strong: #f3f4f6;
+  --text-body: #d1d5db;
+  --text-muted: #9ca3af;
+  --text-faint: #6b7280;
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-canvas text-body antialiased;
+  /* Smooth the flip between themes. */
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Range input (audio scrubber) baseline styling so it reads consistently across browsers. */
+input[type='range'] {
+  @apply cursor-pointer;
+}
