@@ -29,13 +29,16 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = useCallback(() => {
-    // Redirect to server-side login (Entra ID)
-    window.location.href = `${AUTH_BASE}/login`
+    // Redirect to server-side login (Entra ID), passing FE origin for multi-client SSO.
+    // BE validates ?redirect against APP_ORIGINS allowlist (plus FRONTEND_URL fallback) and stores in session for /auth/callback.
+    const redirect = encodeURIComponent(window.location.origin)
+    window.location.href = `${AUTH_BASE}/login?redirect=${redirect}`
   }, [])
 
   const logout = useCallback(() => {
-    // Redirect to server-side logout (destroys session + Microsoft logout)
-    window.location.href = `${AUTH_BASE}/logout`
+    // Redirect to server-side logout (destroys session + Microsoft logout), passing FE origin.
+    const redirect = encodeURIComponent(window.location.origin)
+    window.location.href = `${AUTH_BASE}/logout?redirect=${redirect}`
   }, [])
 
   const isAuthenticated = !!user

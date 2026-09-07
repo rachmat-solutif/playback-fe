@@ -7,9 +7,22 @@ const AUTH_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
   ? `${(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')}/auth`
   : '/auth'
 
-// Login page: provider-aware.
-// - When BE AUTH_PROVIDER=entra: auto-redirect to Microsoft via GET /auth/login (no dummy form).
-// - When BE AUTH_PROVIDER=dummy/bypass: show dummy form (user/123456) + optional Entra button.
+function getRedirectOrigin() {
+  return window.location.origin
+}
+
+function buildLoginUrl() {
+  return `${AUTH_BASE}/login?redirect=${encodeURIComponent(getRedirectOrigin())}`
+}
+
+function buildLoginPostUrl() {
+  return `${AUTH_BASE}/login?redirect=${encodeURIComponent(getRedirectOrigin())}`
+}
+
+// Login page: provider-aware, multi-client (single BE serves multiple FEs).
+// - When BE AUTH_PROVIDER=entra: auto-redirect to Microsoft via GET /auth/login?redirect=<FE origin> (no dummy form).
+// - When BE AUTH_PROVIDER=dummy/bypass: show dummy form (user/123456) POST /auth/login?redirect=<FE origin>.
+// FE origin is passed as ?redirect and validated against BE APP_ORIGINS allowlist (plus FRONTEND_URL fallback).
 // Uses same-origin proxy when VITE_API_BASE_URL="" (vite.config.js:18).
 export default function Login() {
   const { isAuthenticated, loading } = useAuth()
@@ -48,11 +61,11 @@ export default function Login() {
         if (res.ok) {
           const data = await res.json().catch(() => ({}))
           if (cancelled) return
-          // Entra: never show dummy form. Auto-redirect only if configured.
+          // Entra: never show dummy form. Auto-redirect only if configured, passing FE origin for multi-client.
           if (data.authProvider === 'entra') {
             setProvider('entra')
             if (data.entraConfigured) {
-              window.location.href = `${AUTH_BASE}/login`
+              window.location.href = buildLoginUrl()
             } else {
               setError('Entra is selected on BE but not configured (missing ENTRA_CLIENT_ID, ENTRA_TENANT_ID, or ENTRA_CLIENT_SECRET). Set them in playback-be/.env.development and restart BE to enable SSO. Dummy login is not shown because BE is in Entra mode.')
             }
@@ -77,7 +90,7 @@ export default function Login() {
           if (cancelled) return
           if (isEntra) {
             setProvider('entra')
-            window.location.href = `${AUTH_BASE}/login`
+            window.location.href = buildLoginUrl()
             return
           }
           setProvider('dummy')
@@ -97,7 +110,7 @@ export default function Login() {
     setError('')
     setSubmitting(true)
     try {
-      const res = await fetch(`${AUTH_BASE}/login`, {
+      const res = await fetch(buildLoginPostUrl(), {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -118,7 +131,7 @@ export default function Login() {
 
   async function handleEntraLogin() {
     // Entra SSO: use public GET /auth/config (index.ts:226) to avoid guessing via redirect probe.
-    // In dummy/bypass (AUTH_PROVIDER=dummy) GET /auth/login 302s to "/" and would loop to /login.
+    // In dummy/bypass (AUTH_PROVIDER=dummy) GET /auth/login 302s to FE origin and would loop to /login.
     setError('')
     try {
       const res = await fetch(`${AUTH_BASE}/config`, {
@@ -129,7 +142,7 @@ export default function Login() {
       if (res.ok) {
         const data = await res.json().catch(() => ({}))
         if (data.authProvider === 'entra' && data.entraConfigured) {
-          window.location.href = `${AUTH_BASE}/login`
+          window.location.href = buildLoginUrl()
           return
         }
         if (data.authProvider === 'entra' && !data.entraConfigured) {
@@ -140,27 +153,27 @@ export default function Login() {
         return
       }
       // Fallback if /auth/config not available (older BE): probe GET /auth/login redirect
-      const res2 = await fetch(`${AUTH_BASE}/login`, {
+      const res2 = await fetch(`${AUTH_BASE}/login?redirect=${encodeURIComponent(getRedirectOrigin())}`, {
         method: 'GET',
         credentials: 'include',
         redirect: 'manual',
       })
       const loc = res2.headers.get('location') || ''
       if (loc.includes('login.microsoftonline.com')) {
-        window.location.href = `${AUTH_BASE}/login`
+        window.location.href = buildLoginUrl()
         return
       }
       if (res2.type === 'opaqueredirect' || res2.status === 0) {
-        window.location.href = `${AUTH_BASE}/login`
+        window.location.href = buildLoginUrl()
         return
       }
       if (loc === '/' || loc.endsWith('/') || res2.status === 302) {
         setError('Entra SSO is disabled (BE AUTH_PROVIDER=dummy). Use dummy login above (user / 123456) or set AUTH_PROVIDER=entra + ENTRA_* in playback-be/.env.development and restart BE.')
         return
       }
-      window.location.href = `${AUTH_BASE}/login`
+      window.location.href = buildLoginUrl()
     } catch {
-      window.location.href = `${AUTH_BASE}/login`
+      window.location.href = buildLoginUrl()
     }
   }
 
