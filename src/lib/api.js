@@ -21,7 +21,13 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `API error: ${res.status}`);
+    // BE Zod validation returns { message, error: 'Bad Request' }; use message for details
+    const msg = body.message || body.error || `API error: ${res.status}`;
+    // Flatten Zod validation details if present (body.details or body.message contains array)
+    if (body.details) {
+      throw new Error(`${msg}: ${JSON.stringify(body.details)}`);
+    }
+    throw new Error(msg);
   }
 
   return res.json();
