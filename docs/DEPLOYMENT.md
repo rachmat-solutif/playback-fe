@@ -17,10 +17,12 @@ VITE_API_BASE_URL=https://api.playback.rachmat.pro npm run build
 - Framework preset: **Vite**
 - Build command: `npm run build`
 - Output directory: `dist`
-- Environment variable: `VITE_API_BASE_URL=https://api.playback.rachmat.pro`
+- Environment variable: `VITE_API_BASE_URL=https://api.playback.rachmat.pro` (direct cross-site) or `""` with proxy (see `docs/VERCEL_STAGING.md`)
 - SPA fallback: all routes serve `index.html` (Vercel `vercel.json` -> `rewrites: [{ source: "/(.*)", destination: "/index.html" }]`; Netlify `_redirects` -> `/* /index.html 200`)
 
 No serverless function needed - FE is purely static.
+
+> **Staging on Vercel Hobby Free (recommended):** `docs/VERCEL_STAGING.md` - same-origin rewrite proxy to `https://playback-be-staging.vercel.app` (`/api/:path*`, `/auth/:path*`, `/health`, `/api/health` -> BE, then `/(.*) -> /index.html`). Avoids `vercel.app` PSL cross-site cookie (`SameSite=None` not needed, `Lax` works). Uses only `*.vercel.app` free domains, `VITE_API_BASE_URL=""`.
 
 ## Option B: Docker + nginx (any VM)
 
@@ -83,6 +85,7 @@ Session cookie:
 
 - Local (same-origin proxy): `sameSite: lax`, `secure: false` is fine.
 - Staging/production (cross-site): `sameSite: none` + `secure: true`, HTTPS required. Already configured in `playback-be` when `NODE_ENV` is `staging`/`production`.
+- **Vercel Free staging with rewrite proxy (`docs/VERCEL_STAGING.md`):** FE `https://playback-fe-staging.vercel.app` proxies `/api`, `/auth`, `/health` to `https://playback-be-staging.vercel.app` via `vercel.json` rewrites. Browser sees single origin, so `sameSite: lax; secure: true` (host-only, no `Domain`) works - no CORS `origin` entry needed and no `SameSite=None`. Keep `VITE_API_BASE_URL=""`.
 
 Also set `ENTRA_REDIRECT_URI` to the FE-aware callback (e.g. `https://api.playback.rachmat.pro/auth/callback` - BE handles it, then redirects to FE).
 
