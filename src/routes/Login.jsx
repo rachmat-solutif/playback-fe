@@ -28,31 +28,60 @@ export default function Login() {
     }
   }, [loading, isAuthenticated, navigate])
 
-  // Detect BE auth provider on mount: GET /auth/login 302 -> Microsoft = entra, 302 / = dummy/bypass
+  // Detect BE auth provider via public GET /auth/config (src/server/auth/index.ts:226, guard.ts:6 isPublicRoute)
+  // Returns {authProvider: entra|dummy|none, authBypass: boolean, entraConfigured: boolean}
+  // Falls back to legacy GET /auth/login 302 probe if /auth/config unavailable (older BE)
   useEffect(() => {
     if (loading || isAuthenticated) return
     let cancelled = false
     async function probe() {
       setCheckingProvider(true)
       try {
-        const res = await fetch(`${AUTH_BASE}/login`, {
+        const res = await fetch(`${AUTH_BASE}/config`, {
           method: 'GET',
           credentials: 'include',
-          redirect: 'manual',
+          headers: { Accept: 'application/json' },
         })
-        const loc = res.headers.get('location') || ''
-        const isEntra = loc.includes('login.microsoftonline.com')
-        if (cancelled) return
-        if (isEntra) {
-          setProvider('entra')
-          // Auto-redirect to Entra SSO (PKCE flow sets session cookies before redirect)
-          window.location.href = `${AUTH_BASE}/login`
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}))
+          const isEntra = data.authProvider === 'entra' && data.entraConfigured
+          // If BE says entra but not configured -> treat as dummy and show error
+          const entraMisconfigured = data.authProvider === 'entra' && !data.entraConfigured
+          if (cancelled) return
+          if (isEntra) {
+            setProvider('entra')
+            window.location.href = `${AUTH_BASE}/login`
+            return
+          }
+          if (entraMisconfigured) {
+            setError('Entra is selected but not configured (missing ENTRA_CLIENT_ID/TENANT_ID/SECRET). Using dummy login. Set ENTRA_* in playback-be/.env.development and restart BE for SSO.')
+          }
+          // dummy / none / bypass -> show dummy form (authBypass true still uses dummy form but /auth/me returns dev-user)
+          setProvider('dummy')
           return
         }
-        // Dummy/bypass: 302 / or 200 etc. -> show dummy form
-        setProvider('dummy')
+        // Non-200 -> fallback to legacy probe
+        throw new Error(`config ${res.status}`)
       } catch {
-        if (!cancelled) setProvider('dummy')
+        // Legacy fallback: GET /auth/login 302 -> Microsoft = entra, 302 / = dummy/bypass
+        try {
+          const res2 = await fetch(`${AUTH_BASE}/login`, {
+            method: 'GET',
+            credentials: 'include',
+            redirect: 'manual',
+          })
+          const loc = res2.headers.get('location') || ''
+          const isEntra = loc.includes('login.microsoftonline.com')
+          if (cancelled) return
+          if (isEntra) {
+            setProvider('entra')
+            window.location.href = `${AUTH_BASE}/login`
+            return
+          }
+          setProvider('dummy')
+        } catch {
+          if (!cancelled) setProvider('dummy')
+        }
       } finally {
         if (!cancelled) setCheckingProvider(false)
       }
@@ -86,36 +115,49 @@ export default function Login() {
   }
 
   async function handleEntraLogin() {
-    // Entra SSO: GET /auth/login redirects to Microsoft when AUTH_PROVIDER=entra.
-    // In dummy/bypass local dev (BE .env AUTH_PROVIDER=dummy) this endpoint
-    // 302s to "/" and does NOT create a session, so bouncing would loop to /login.
-    // Detect via manual redirect and show a helpful message instead of looping.
+    // Entra SSO: use public GET /auth/config (index.ts:226) to avoid guessing via redirect probe.
+    // In dummy/bypass (AUTH_PROVIDER=dummy) GET /auth/login 302s to "/" and would loop to /login.
     setError('')
     try {
-      const res = await fetch(`${AUTH_BASE}/login`, {
+      const res = await fetch(`${AUTH_BASE}/config`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        if (data.authProvider === 'entra' && data.entraConfigured) {
+          window.location.href = `${AUTH_BASE}/login`
+          return
+        }
+        if (data.authProvider === 'entra' && !data.entraConfigured) {
+          setError('Entra SSO is selected but not configured (missing ENTRA_CLIENT_ID/TENANT_ID/SECRET). Set them in playback-be/.env.development and restart BE.')
+          return
+        }
+        setError('Entra SSO is disabled (BE AUTH_PROVIDER=dummy). Use dummy login above (user / 123456) or set AUTH_PROVIDER=entra + ENTRA_* in playback-be/.env.development and restart BE.')
+        return
+      }
+      // Fallback if /auth/config not available (older BE): probe GET /auth/login redirect
+      const res2 = await fetch(`${AUTH_BASE}/login`, {
         method: 'GET',
         credentials: 'include',
         redirect: 'manual',
       })
-      const loc = res.headers.get('location') || ''
-      // Fastify 302: location is "/" for dummy, "https://login.microsoftonline.com/..." for entra
+      const loc = res2.headers.get('location') || ''
       if (loc.includes('login.microsoftonline.com')) {
         window.location.href = `${AUTH_BASE}/login`
         return
       }
-      if (res.type === 'opaqueredirect' || res.status === 0) {
-        // Vite proxy may return opaqueredirect for manual; fall through to navigation
-        // and let BE decide, but dummy will bounce to "/" without session -> show hint
+      if (res2.type === 'opaqueredirect' || res2.status === 0) {
         window.location.href = `${AUTH_BASE}/login`
         return
       }
-      if (loc === '/' || loc.endsWith('/') || res.status === 302) {
+      if (loc === '/' || loc.endsWith('/') || res2.status === 302) {
         setError('Entra SSO is disabled (BE AUTH_PROVIDER=dummy). Use dummy login above (user / 123456) or set AUTH_PROVIDER=entra + ENTRA_* in playback-be/.env.development and restart BE.')
         return
       }
       window.location.href = `${AUTH_BASE}/login`
     } catch {
-      // Network fallback: try direct navigation
       window.location.href = `${AUTH_BASE}/login`
     }
   }
