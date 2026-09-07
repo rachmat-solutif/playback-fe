@@ -5,19 +5,20 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Brand palette (crimson). Scale mapped so existing primary-50/100/500/600/700
-        // classes keep working; 50/100 are the secondary-hover/press tints.
+        // Brand palette - values are CSS variables baked by vite-plugin-build-theme
+        // from VITE_THEME / VITE_THEME_PRIMARY (src/theme/presets.js + scale.js).
+        // Fallbacks below are crimson defaults; plugin overwrites :root vars at build/dev.
         primary: {
-          50: '#fdf4f6', // secondary-hover
-          100: '#f8dbe3', // secondary-press
-          200: '#f3bccb',
-          300: '#e88ba5',
-          400: '#dd4f74',
-          500: '#d31145', // primary-color
-          600: '#b40e3a', // primary-hover
-          700: '#940b30', // primary-focus
-          800: '#7a0a2a',
-          900: '#5f0821',
+          50: 'var(--primary-50)',
+          100: 'var(--primary-100)',
+          200: 'var(--primary-200)',
+          300: 'var(--primary-300)',
+          400: 'var(--primary-400)',
+          500: 'var(--primary-color)',
+          600: 'var(--primary-hover)',
+          700: 'var(--primary-focus)',
+          800: 'var(--primary-800)',
+          900: 'var(--primary-900)',
         },
         // Tab accents (used by segmented toggles).
         tab: {

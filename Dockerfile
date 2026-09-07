@@ -4,9 +4,14 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci 2>/dev/null || npm install
 COPY . .
-# VITE_API_BASE_URL is baked at build time; override with --build-arg if needed
+# Build-time env: VITE_API_BASE_URL and theme (VITE_THEME / VITE_THEME_PRIMARY) are baked.
+# Override with --build-arg per client: docker build --build-arg VITE_THEME=ocean -t playback-fe:ocean .
 ARG VITE_API_BASE_URL
+ARG VITE_THEME
+ARG VITE_THEME_PRIMARY
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_THEME=$VITE_THEME
+ENV VITE_THEME_PRIMARY=$VITE_THEME_PRIMARY
 RUN npm run build
 
 FROM nginx:stable-alpine AS production

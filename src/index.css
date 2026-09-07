@@ -4,10 +4,18 @@
 @tailwind utilities;
 
 :root {
-  /* Brand tokens (from the approved palette). */
+  /* Brand tokens - baked by vite-plugin-build-theme from VITE_THEME / VITE_THEME_PRIMARY.
+     Fallbacks below are crimson (default preset) so the build works without env. */
   --primary-color: #d31145;
   --primary-focus: #940b30;
   --primary-hover: #b40e3a;
+  --primary-50: #fdf4f6;
+  --primary-100: #f8dbe3;
+  --primary-200: #f3bccb;
+  --primary-300: #e88ba5;
+  --primary-400: #dd4f74;
+  --primary-800: #7a0a2a;
+  --primary-900: #5f0821;
   --secondary-hover: #fdf4f6;
   --secondary-press: #f8dbe3;
   --tab-hover: #5699c1;
