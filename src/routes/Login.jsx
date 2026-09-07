@@ -7,8 +7,10 @@ const AUTH_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
   ? `${(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')}/auth`
   : '/auth'
 
-// Login page: dummy auth form (user/123456) for local dev + Entra SSO redirect.
-// Uses same-origin proxy when VITE_API_BASE_URL="" (vite.config.js proxy).
+// Login page: provider-aware.
+// - When BE AUTH_PROVIDER=entra: auto-redirect to Microsoft via GET /auth/login (no dummy form).
+// - When BE AUTH_PROVIDER=dummy/bypass: show dummy form (user/123456) + optional Entra button.
+// Uses same-origin proxy when VITE_API_BASE_URL="" (vite.config.js:18).
 export default function Login() {
   const { isAuthenticated, loading } = useAuth()
   const navigate = useNavigate()
@@ -16,6 +18,8 @@ export default function Login() {
   const [password, setPassword] = useState('123456')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [provider, setProvider] = useState(null) // 'entra' | 'dummy' | null
+  const [checkingProvider, setCheckingProvider] = useState(true)
 
   // If already authenticated, redirect to home
   useEffect(() => {
@@ -23,6 +27,39 @@ export default function Login() {
       navigate('/', { replace: true })
     }
   }, [loading, isAuthenticated, navigate])
+
+  // Detect BE auth provider on mount: GET /auth/login 302 -> Microsoft = entra, 302 / = dummy/bypass
+  useEffect(() => {
+    if (loading || isAuthenticated) return
+    let cancelled = false
+    async function probe() {
+      setCheckingProvider(true)
+      try {
+        const res = await fetch(`${AUTH_BASE}/login`, {
+          method: 'GET',
+          credentials: 'include',
+          redirect: 'manual',
+        })
+        const loc = res.headers.get('location') || ''
+        const isEntra = loc.includes('login.microsoftonline.com')
+        if (cancelled) return
+        if (isEntra) {
+          setProvider('entra')
+          // Auto-redirect to Entra SSO (PKCE flow sets session cookies before redirect)
+          window.location.href = `${AUTH_BASE}/login`
+          return
+        }
+        // Dummy/bypass: 302 / or 200 etc. -> show dummy form
+        setProvider('dummy')
+      } catch {
+        if (!cancelled) setProvider('dummy')
+      } finally {
+        if (!cancelled) setCheckingProvider(false)
+      }
+    }
+    probe()
+    return () => { cancelled = true }
+  }, [loading, isAuthenticated])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -87,6 +124,55 @@ export default function Login() {
 
   if (isAuthenticated) return null
 
+  // While probing provider, show neutral loading. If entra, we will redirect immediately.
+  if (checkingProvider) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="fixed right-4 top-4">
+          <ThemeToggle />
+        </div>
+        <div className="w-full max-w-sm text-center">
+          <div className="mb-6 flex flex-col items-center gap-2">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-500 text-white">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </span>
+            <h1 className="text-2xl font-bold text-strong">Playback</h1>
+            <p className="text-sm text-muted">Checking sign-in...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Entra mode: auto-redirect already triggered, show redirecting state without dummy form
+  if (provider === 'entra') {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="fixed right-4 top-4">
+          <ThemeToggle />
+        </div>
+        <div className="w-full max-w-sm text-center">
+          <div className="mb-6 flex flex-col items-center gap-2">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-500 text-white">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </span>
+            <h1 className="text-2xl font-bold text-strong">Playback</h1>
+            <p className="text-sm text-muted">Redirecting to Microsoft sign-in...</p>
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button onClick={handleEntraLogin} className="mt-4 text-sm text-muted hover:text-strong underline">
+            Continue to Microsoft
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Dummy / bypass mode: show username/password form
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="fixed right-4 top-4">
