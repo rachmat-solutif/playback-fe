@@ -30,6 +30,9 @@ export default function Login() {
 
   // Detect BE auth provider via public GET /auth/config (src/server/auth/index.ts:226, guard.ts:6 isPublicRoute)
   // Returns {authProvider: entra|dummy|none, authBypass: boolean, entraConfigured: boolean}
+  // When authProvider==='entra': never show dummy form. If configured -> auto-redirect to Microsoft.
+  // If entra but not configured -> show misconfigured state (no dummy form).
+  // When authProvider==='dummy'|'none': show dummy form + Entra button.
   // Falls back to legacy GET /auth/login 302 probe if /auth/config unavailable (older BE)
   useEffect(() => {
     if (loading || isAuthenticated) return
@@ -44,19 +47,18 @@ export default function Login() {
         })
         if (res.ok) {
           const data = await res.json().catch(() => ({}))
-          const isEntra = data.authProvider === 'entra' && data.entraConfigured
-          // If BE says entra but not configured -> treat as dummy and show error
-          const entraMisconfigured = data.authProvider === 'entra' && !data.entraConfigured
           if (cancelled) return
-          if (isEntra) {
+          // Entra: never show dummy form. Auto-redirect only if configured.
+          if (data.authProvider === 'entra') {
             setProvider('entra')
-            window.location.href = `${AUTH_BASE}/login`
+            if (data.entraConfigured) {
+              window.location.href = `${AUTH_BASE}/login`
+            } else {
+              setError('Entra is selected on BE but not configured (missing ENTRA_CLIENT_ID, ENTRA_TENANT_ID, or ENTRA_CLIENT_SECRET). Set them in playback-be/.env.development and restart BE to enable SSO. Dummy login is not shown because BE is in Entra mode.')
+            }
             return
           }
-          if (entraMisconfigured) {
-            setError('Entra is selected but not configured (missing ENTRA_CLIENT_ID/TENANT_ID/SECRET). Using dummy login. Set ENTRA_* in playback-be/.env.development and restart BE for SSO.')
-          }
-          // dummy / none / bypass -> show dummy form (authBypass true still uses dummy form but /auth/me returns dev-user)
+          // dummy / none / bypass -> show dummy form
           setProvider('dummy')
           return
         }
